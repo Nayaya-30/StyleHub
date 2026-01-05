@@ -14,7 +14,6 @@ import {
   Zap,
   Globe,
   ArrowRight,
-  CheckCircle,
   Star,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
@@ -73,7 +72,7 @@ export default function HomePage() {
               Professional Tailoring Platform
             </Badge>
             <h1 className="mb-6 text-4xl font-bold tracking-tight md:text-6xl lg:text-7xl">
-              Connecting Africa's{" "}
+              Connecting Africa&apos;s{" "}
               <span className="text-gradient-primary">Best Tailors</span> with
               Customers
             </h1>
@@ -226,7 +225,7 @@ export default function HomePage() {
                       <Star key={i} className="h-5 w-5 fill-warning text-warning" />
                     ))}
                   </div>
-                  <p className="text-muted-foreground mb-4">"{testimonial.content}"</p>
+                  <p className="text-muted-foreground mb-4">&quot;{testimonial.content}&quot;</p>
                   <div>
                     <div className="font-semibold">{testimonial.name}</div>
                     <div className="text-sm text-muted-foreground">{testimonial.role}</div>

@@ -619,4 +619,28 @@ export default defineSchema({
     .index("by_style", ["styleId"])
     .index("by_customer", ["customerId"])
     .index("by_status", ["status"]),
+
+  // Audit Logs (immutable, org-scoped)
+  auditLogs: defineTable({
+    organizationId: v.id("organizations"),
+    actorId: v.id("users"),
+    action: v.string(),
+    targetType: v.string(),
+    targetId: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_actor", ["actorId"])
+    .index("by_created_at", ["createdAt"]),
+
+  // Rate Limits (identity-based)
+  rateLimits: defineTable({
+    userId: v.id("users"),
+    key: v.string(),
+    windowStart: v.number(),
+    count: v.number(),
+  })
+    .index("by_user_and_key", ["userId", "key"])
+    .index("by_window", ["windowStart"]),
 });

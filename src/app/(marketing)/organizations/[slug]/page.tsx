@@ -6,16 +6,17 @@
 
 import { use, useState } from "react";
 import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { api } from "@/convex/_generated/api";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { StyleCard } from "@/components/features/StyleCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import Image from "next/image";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { OrganizationHeaderSkeleton, OrganizationShowcaseSkeleton } from "@/components/loading/OrganizationSkeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { OrganizationShowcaseSkeleton } from "@/components/loading/OrganizationSkeleton";
 import { SkeletonWrapper } from "@/components/ui/skeleton-loader";
 import {
   MapPin,
@@ -27,13 +28,12 @@ import {
   MessageSquare,
   TrendingUp,
 } from "lucide-react";
-import { formatDate } from "@/lib/format";
+ 
 import Link from "next/link";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
 }
-
 export default function OrganizationShowcasePage({ params }: PageProps) {
   const { slug } = use(params);
   const [activeTab, setActiveTab] = useState("all");
@@ -70,7 +70,7 @@ export default function OrganizationShowcasePage({ params }: PageProps) {
           <div className="container-custom py-20 text-center">
             <h1 className="text-4xl font-bold mb-4">Organization Not Found</h1>
             <p className="text-muted-foreground mb-8">
-              The organization you're looking for doesn't exist.
+              The organization you&apos;re looking for doesn&apos;t exist.
             </p>
             <Link href="/organizations">
               <Button>Browse All Organizations</Button>
@@ -94,13 +94,13 @@ export default function OrganizationShowcasePage({ params }: PageProps) {
       <main className="flex-1 bg-background">
         {/* Cover Image */}
         <div className="relative h-64 bg-gradient-to-br from-secondary-100 to-secondary-200">
-          {organization.coverImage && (
-            <img
-              src={organization.coverImage}
-              alt={organization.name}
-              className="h-full w-full object-cover"
-            />
-          )}
+              <Image
+                width={100}
+                height={100}
+                src={organization.coverImage}
+                alt={organization.name}
+                className="h-full w-full object-cover"
+              />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
         </div>
 
@@ -220,8 +220,8 @@ export default function OrganizationShowcasePage({ params }: PageProps) {
               <div className="text-center py-12">
                 <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-xl font-semibold mb-2">No designs found</h3>
-                <p className="text-muted-foreground">
-                  This organization hasn't added any designs in this category yet.
+                <p className="text-muted-foreground mb-8">
+                  This organization hasn&apos;t added any designs in this category yet.
                 </p>
               </div>
             )}

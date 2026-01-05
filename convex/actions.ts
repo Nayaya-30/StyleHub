@@ -1,3 +1,4 @@
+"use node";
 // ============================================
 // FILE: convex/actions.ts
 // ============================================
@@ -5,6 +6,9 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { api } from "./_generated/api";
+import crypto from "crypto";
+import type { Id } from "./_generated/dataModel";
+import { getCurrentUser, requireSameOrg, requireRole, rateLimit, audit } from "./security";
 
 /**
  * Action: Send email invitation
@@ -17,8 +21,10 @@ export const sendInvitationEmail = action({
 		role: v.string(),
 		invitationUrl: v.string(),
 	},
-	handler: async (ctx, args) => {
-		const resendApiKey = process.env.RESEND_API_KEY;
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    await rateLimit(ctx, user._id, "email.invitation", 60000, 20);
+    const resendApiKey = process.env.RESEND_API_KEY;
 		if (!resendApiKey) {
 			throw new Error("RESEND_API_KEY not configured");
 		}
@@ -78,8 +84,15 @@ export const sendInvitationEmail = action({
 				throw new Error(`Failed to send email: ${error}`);
 			}
 
-			const data = await response.json();
-			return { success: true, emailId: data.id };
+      const data = await response.json();
+      await audit(ctx, {
+        organizationId: (user.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+        actorId: user._id,
+        action: "email.invitation",
+        targetType: "organization",
+        metadata: { to: args.email, role: args.role },
+      });
+      return { success: true, emailId: data.id };
 		} catch (error) {
 			console.error("Error sending invitation email:", error);
 			throw error;
@@ -99,8 +112,10 @@ export const sendOrderConfirmationEmail = action({
 		estimatedDelivery: v.string(),
 		orderUrl: v.string(),
 	},
-	handler: async (ctx, args) => {
-		const resendApiKey = process.env.RESEND_API_KEY;
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    await rateLimit(ctx, user._id, "email.order_confirmation", 60000, 20);
+    const resendApiKey = process.env.RESEND_API_KEY;
 		if (!resendApiKey) {
 			throw new Error("RESEND_API_KEY not configured");
 		}
@@ -173,8 +188,15 @@ export const sendOrderConfirmationEmail = action({
 				throw new Error(`Failed to send email: ${error}`);
 			}
 
-			const data = await response.json();
-			return { success: true, emailId: data.id };
+      const data = await response.json();
+      await audit(ctx, {
+        organizationId: (user.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+        actorId: user._id,
+        action: "email.order_confirmation",
+        targetType: "order",
+        metadata: { to: args.email, orderNumber: args.orderNumber },
+      });
+      return { success: true, emailId: data.id };
 		} catch (error) {
 			console.error("Error sending order confirmation email:", error);
 			throw error;
@@ -194,8 +216,10 @@ export const sendOrderStatusEmail = action({
 		statusMessage: v.string(),
 		orderUrl: v.string(),
 	},
-	handler: async (ctx, args) => {
-		const resendApiKey = process.env.RESEND_API_KEY;
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    await rateLimit(ctx, user._id, "email.order_status", 60000, 30);
+    const resendApiKey = process.env.RESEND_API_KEY;
 		if (!resendApiKey) {
 			throw new Error("RESEND_API_KEY not configured");
 		}
@@ -257,8 +281,15 @@ export const sendOrderStatusEmail = action({
 				throw new Error(`Failed to send email: ${error}`);
 			}
 
-			const data = await response.json();
-			return { success: true, emailId: data.id };
+      const data = await response.json();
+      await audit(ctx, {
+        organizationId: (user.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+        actorId: user._id,
+        action: "email.order_status",
+        targetType: "order",
+        metadata: { to: args.email, orderNumber: args.orderNumber, status: args.status },
+      });
+      return { success: true, emailId: data.id };
 		} catch (error) {
 			console.error("Error sending order status email:", error);
 			throw error;
@@ -278,8 +309,13 @@ export const initializePayment = action({
 		customerName: v.string(),
 		customerPhone: v.string(),
 	},
-	handler: async (ctx, args) => {
-		const flutterwaveSecretKey = process.env.FLUTTERWAVE_SECRET_KEY;
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    await rateLimit(ctx, user._id, "payment.init", 60000, 10);
+    const order = await ctx.runQuery(api.orders.getOrderById, { orderId: args.orderId });
+    if (!order) throw new Error("Order not found");
+    requireSameOrg(order.organizationId as Id<"organizations">, user.organizationId);
+    const flutterwaveSecretKey = process.env.FLUTTERWAVE_SECRET_KEY;
 		if (!flutterwaveSecretKey) {
 			throw new Error("FLUTTERWAVE_SECRET_KEY not configured");
 		}
@@ -330,20 +366,29 @@ export const initializePayment = action({
 			}
 
 			// Create payment record
-			await ctx.runMutation(api.payments.createPayment, {
-				orderId: args.orderId,
-				amount: args.amount,
-				currency: args.currency,
-				transactionRef: txRef,
-				providerRef: data.data.id.toString(),
-				paymentMethod: "flutterwave",
-			});
+      await ctx.runMutation(api.payments.createPayment, {
+        orderId: args.orderId,
+        amount: args.amount,
+        currency: args.currency,
+        transactionRef: txRef,
+        providerRef: data.data.id.toString(),
+        paymentMethod: "flutterwave",
+      });
 
-			return {
-				success: true,
-				paymentUrl: data.data.link,
-				transactionRef: txRef,
-			};
+      await audit(ctx, {
+        organizationId: order.organizationId as Id<"organizations">,
+        actorId: user._id,
+        action: "payment.init",
+        targetType: "order",
+        targetId: args.orderId as unknown as string,
+        metadata: { txRef, amount: args.amount, currency: args.currency },
+      });
+
+      return {
+        success: true,
+        paymentUrl: data.data.link,
+        transactionRef: txRef,
+      };
 		} catch (error) {
 			console.error("Error initializing payment:", error);
 			throw error;
@@ -359,8 +404,10 @@ export const verifyPayment = action({
 		transactionId: v.string(),
 		txRef: v.string(),
 	},
-	handler: async (ctx, args) => {
-		const flutterwaveSecretKey = process.env.FLUTTERWAVE_SECRET_KEY;
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    await rateLimit(ctx, user._id, "payment.verify", 60000, 20);
+    const flutterwaveSecretKey = process.env.FLUTTERWAVE_SECRET_KEY;
 		if (!flutterwaveSecretKey) {
 			throw new Error("FLUTTERWAVE_SECRET_KEY not configured");
 		}
@@ -391,16 +438,28 @@ export const verifyPayment = action({
 			const paymentData = data.data;
 
 			// Update payment status
-			await ctx.runMutation(api.payments.updatePaymentStatus, {
-				transactionRef: args.txRef,
-				status: paymentData.status === "successful" ? "successful" : "failed",
-				providerRef: paymentData.id.toString(),
-				metadata: {
-					amount: paymentData.amount,
-					currency: paymentData.currency,
-					paymentType: paymentData.payment_type,
-				},
-			});
+      await ctx.runMutation(api.payments.updatePaymentStatus, {
+        transactionRef: args.txRef,
+        status: paymentData.status === "successful" ? "successful" : "failed",
+        providerRef: paymentData.id.toString(),
+        metadata: {
+          amount: paymentData.amount,
+          currency: paymentData.currency,
+          paymentType: paymentData.payment_type,
+        },
+      });
+
+      const payment = await ctx.runQuery(api.payments.getPaymentByTransactionRef, { transactionRef: args.txRef });
+      if (payment) {
+        await audit(ctx, {
+          organizationId: payment.organizationId as Id<"organizations">,
+          actorId: user._id,
+          action: "payment.verify",
+          targetType: "payment",
+          targetId: payment._id as unknown as string,
+          metadata: { status: paymentData.status },
+        });
+      }
 
 			return {
 				success: paymentData.status === "successful",
@@ -428,8 +487,10 @@ export const uploadToCloudinary = action({
 			v.literal("raw")
 		)),
 	},
-	handler: async (ctx, args) => {
-		const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    await rateLimit(ctx, user._id, "cloudinary.upload", 60000, 50);
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 		const apiKey = process.env.CLOUDINARY_API_KEY;
 		const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
@@ -462,14 +523,21 @@ export const uploadToCloudinary = action({
 
 			const data = await response.json();
 
-			return {
-				success: true,
-				publicId: data.public_id,
-				url: data.secure_url,
-				width: data.width,
-				height: data.height,
-				format: data.format,
-			};
+      await audit(ctx, {
+        organizationId: (user.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+        actorId: user._id,
+        action: "cloudinary.upload",
+        targetType: "asset",
+        metadata: { folder: args.folder, resourceType: args.resourceType || "image" },
+      });
+      return {
+        success: true,
+        publicId: data.public_id,
+        url: data.secure_url,
+        width: data.width,
+        height: data.height,
+        format: data.format,
+      };
 		} catch (error) {
 			console.error("Error uploading to Cloudinary:", error);
 			throw error;
@@ -489,8 +557,10 @@ export const deleteFromCloudinary = action({
 			v.literal("raw")
 		)),
 	},
-	handler: async (ctx, args) => {
-		const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    await rateLimit(ctx, user._id, "cloudinary.delete", 60000, 50);
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 		const apiKey = process.env.CLOUDINARY_API_KEY;
 		const apiSecret = process.env.CLOUDINARY_API_SECRET;
 
@@ -498,15 +568,19 @@ export const deleteFromCloudinary = action({
 			throw new Error("Cloudinary credentials not configured");
 		}
 
-		try {
-			const timestamp = Math.round(Date.now() / 1000);
-			const signature = `public_id=${args.publicId}&timestamp=${timestamp}${apiSecret}`;
+    try {
+      const timestamp = Math.round(Date.now() / 1000);
+      const stringToSign = `public_id=${args.publicId}&timestamp=${timestamp}`;
+      const signature = crypto
+        .createHash("sha1")
+        .update(stringToSign + apiSecret)
+        .digest("hex");
 
-			const formData = new FormData();
-			formData.append("public_id", args.publicId);
-			formData.append("timestamp", timestamp.toString());
-			formData.append("api_key", apiKey);
-			formData.append("signature", signature);
+      const formData = new FormData();
+      formData.append("public_id", args.publicId);
+      formData.append("timestamp", timestamp.toString());
+      formData.append("api_key", apiKey);
+      formData.append("signature", signature);
 
 			const response = await fetch(
 				`https://api.cloudinary.com/v1_1/${cloudName}/${args.resourceType || "image"}/destroy`,
@@ -521,12 +595,20 @@ export const deleteFromCloudinary = action({
 				throw new Error(`Failed to delete from Cloudinary: ${error}`);
 			}
 
-			const data = await response.json();
+      const data = await response.json();
 
-			return {
-				success: data.result === "ok",
-				result: data.result,
-			};
+      await audit(ctx, {
+        organizationId: (user.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+        actorId: user._id,
+        action: "cloudinary.delete",
+        targetType: "asset",
+        metadata: { publicId: args.publicId, resourceType: args.resourceType || "image" },
+      });
+
+      return {
+        success: data.result === "ok",
+        result: data.result,
+      };
 		} catch (error) {
 			console.error("Error deleting from Cloudinary:", error);
 			throw error;

@@ -45,7 +45,7 @@ export default function PaymentSuccessPage() {
             <div>
               <h1 className="text-3xl font-bold mb-2">Order Placed Successfully!</h1>
               <p className="text-muted-foreground">
-                Thank you for your order. We've received your payment and your order
+                Thank you for your order. We&apos;ve received your payment and your order
                 is being processed.
               </p>
             </div>
@@ -54,9 +54,9 @@ export default function PaymentSuccessPage() {
               <div className="flex items-center gap-3 text-left">
                 <Package className="h-10 w-10 text-primary flex-shrink-0" />
                 <div>
-                  <div className="font-semibold">What's Next?</div>
+                  <div className="font-semibold">What&apos;s Next?</div>
                   <p className="text-sm text-muted-foreground">
-                    Our team will review your order and start production. You'll receive
+                    Our team will review your order and start production. You&apos;ll receive
                     updates via email and in your dashboard.
                   </p>
                 </div>

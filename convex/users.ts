@@ -5,6 +5,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { getCurrentUser, requireRole, requireSameOrg, rateLimit, audit } from "./security";
 
 /**
  * Query: Get user by Clerk ID
@@ -170,13 +171,29 @@ export const updateUserProfile = mutation({
     avatar: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { userId, ...updates } = args;
+    const actor = await getCurrentUser(ctx);
+    const target = await ctx.db.get(args.userId);
+    if (!target) throw new Error("User not found");
+    const sameUser = actor._id === args.userId;
+    if (!sameUser) {
+      requireSameOrg((target.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), actor.organizationId);
+      requireRole(actor.role, ["org_admin", "manager", "super_admin"]);
+    }
+    await rateLimit(ctx, actor._id, "user.profile.update", 60000, 20);
 
+    const { userId, ...updates } = args;
     await ctx.db.patch(userId, {
       ...updates,
       updatedAt: Date.now(),
     });
 
+    await audit(ctx, {
+      organizationId: (actor.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+      actorId: actor._id,
+      action: "user.profile.update",
+      targetType: "user",
+      targetId: userId as unknown as string,
+    });
     return { success: true };
   },
 });
@@ -199,9 +216,27 @@ export const updateUserPreferences = mutation({
     }),
   },
   handler: async (ctx, args) => {
+    const actor = await getCurrentUser(ctx);
+    const target = await ctx.db.get(args.userId);
+    if (!target) throw new Error("User not found");
+    const sameUser = actor._id === args.userId;
+    if (!sameUser) {
+      requireSameOrg((target.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), actor.organizationId);
+      requireRole(actor.role, ["org_admin", "manager", "super_admin"]);
+    }
+    await rateLimit(ctx, actor._id, "user.preferences.update", 60000, 20);
+
     await ctx.db.patch(args.userId, {
       preferences: args.preferences,
       updatedAt: Date.now(),
+    });
+
+    await audit(ctx, {
+      organizationId: (actor.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+      actorId: actor._id,
+      action: "user.preferences.update",
+      targetType: "user",
+      targetId: args.userId as unknown as string,
     });
 
     return { success: true };
@@ -227,9 +262,27 @@ export const saveUserMeasurements = mutation({
     }),
   },
   handler: async (ctx, args) => {
+    const actor = await getCurrentUser(ctx);
+    const target = await ctx.db.get(args.userId);
+    if (!target) throw new Error("User not found");
+    const sameUser = actor._id === args.userId;
+    if (!sameUser) {
+      requireSameOrg((target.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), actor.organizationId);
+      requireRole(actor.role, ["org_admin", "manager", "super_admin"]);
+    }
+    await rateLimit(ctx, actor._id, "user.measurements.save", 60000, 30);
+
     await ctx.db.patch(args.userId, {
       savedMeasurements: args.measurements,
       updatedAt: Date.now(),
+    });
+
+    await audit(ctx, {
+      organizationId: (actor.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+      actorId: actor._id,
+      action: "user.measurements.save",
+      targetType: "user",
+      targetId: args.userId as unknown as string,
     });
 
     return { success: true };

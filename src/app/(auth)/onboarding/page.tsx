@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { api } from "@/convex/_generated/api";
 import { useUser } from "@/hooks/useUser";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,7 +81,7 @@ export default function OnboardingPage() {
           </div>
           <CardTitle className="text-3xl">Welcome to StyleHub!</CardTitle>
           <p className="text-muted-foreground">
-            Let's get you set up. Choose your role to continue.
+            Let&apos;s get you set up. Choose your role to continue.
           </p>
         </CardHeader>
         <CardContent className="space-y-6">

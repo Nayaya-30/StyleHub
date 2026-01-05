@@ -6,8 +6,8 @@
 
 import { use } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
-import { Id } from "../../../../convex/_generated/dataModel";
+import { api } from "@/convex/_generated/api";
+import { Id } from "@/convex/_generated/dataModel";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ export default function StyleDetailPage({ params }: PageProps) {
           <div className="container-custom py-20 text-center">
             <h1 className="text-4xl font-bold mb-4">Style Not Found</h1>
             <p className="text-muted-foreground mb-8">
-              The style you're looking for doesn't exist or has been removed.
+              The style you&apos;re looking for doesn&apos;t exist or has been removed.
             </p>
             <Link href="/styles">
               <Button>Browse All Styles</Button>

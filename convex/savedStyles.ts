@@ -4,6 +4,8 @@
 
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { getCurrentUser, requireSameOrg, rateLimit, audit } from "./security";
 
 /**
  * Query: Get saved styles for user
@@ -11,6 +13,10 @@ import { mutation, query } from "./_generated/server";
 export const getSavedStylesByUser = query({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const target = await ctx.db.get(args.userId);
+    if (!target) throw new Error("User not found");
+    requireSameOrg((target.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), user.organizationId);
     const savedStyles = await ctx.db
       .query("savedStyles")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
@@ -30,6 +36,10 @@ export const isStyleSaved = query({
     styleId: v.id("styles"),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const target = await ctx.db.get(args.userId);
+    if (!target) throw new Error("User not found");
+    requireSameOrg((target.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), user.organizationId);
     const saved = await ctx.db
       .query("savedStyles")
       .withIndex("by_user_and_style", (q) => 
@@ -51,6 +61,13 @@ export const saveStyle = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const actor = await getCurrentUser(ctx);
+    if (actor._id !== args.userId) {
+      const target = await ctx.db.get(args.userId);
+      if (!target) throw new Error("User not found");
+      requireSameOrg((target.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), actor.organizationId);
+    }
+    await rateLimit(ctx, actor._id, "style.save", 60000, 50);
     // Check if already saved
     const existing = await ctx.db
       .query("savedStyles")
@@ -94,6 +111,13 @@ export const saveStyle = mutation({
       });
     }
 
+    await audit(ctx, {
+      organizationId: (actor.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+      actorId: actor._id,
+      action: "style.save",
+      targetType: "style",
+      targetId: args.styleId as unknown as string,
+    });
     return savedStyleId;
   },
 });
@@ -107,6 +131,13 @@ export const unsaveStyle = mutation({
     styleId: v.id("styles"),
   },
   handler: async (ctx, args) => {
+    const actor = await getCurrentUser(ctx);
+    if (actor._id !== args.userId) {
+      const target = await ctx.db.get(args.userId);
+      if (!target) throw new Error("User not found");
+      requireSameOrg((target.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), actor.organizationId);
+    }
+    await rateLimit(ctx, actor._id, "style.unsave", 60000, 50);
     const saved = await ctx.db
       .query("savedStyles")
       .withIndex("by_user_and_style", (q) => 
@@ -144,6 +175,13 @@ export const unsaveStyle = mutation({
       });
     }
 
+    await audit(ctx, {
+      organizationId: (actor.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+      actorId: actor._id,
+      action: "style.unsave",
+      targetType: "style",
+      targetId: args.styleId as unknown as string,
+    });
     return { success: true };
   },
 });

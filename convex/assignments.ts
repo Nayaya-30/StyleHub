@@ -4,6 +4,8 @@
 
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { getCurrentUser, requireSameOrg, requireRole, rateLimit, audit } from "./security";
 
 /**
  * Query: Get assignments by worker
@@ -20,6 +22,10 @@ export const getAssignmentsByWorker = query({
     )),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const worker = await ctx.db.get(args.workerId);
+    if (!worker) throw new Error("Worker not found");
+    requireSameOrg((worker.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), user.organizationId);
     const query = ctx.db
       .query("assignments")
       .withIndex("by_worker", (q) => q.eq("workerId", args.workerId))
@@ -41,6 +47,10 @@ export const getAssignmentsByWorker = query({
 export const getAssignmentsByOrder = query({
   args: { orderId: v.id("orders") },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    requireSameOrg(order.organizationId as Id<"organizations">, user.organizationId);
     const assignments = await ctx.db
       .query("assignments")
       .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
@@ -56,6 +66,10 @@ export const getAssignmentsByOrder = query({
 export const getAssignmentsByManager = query({
   args: { managerId: v.id("users") },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    const manager = await ctx.db.get(args.managerId);
+    if (!manager) throw new Error("Manager not found");
+    requireSameOrg((manager.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), user.organizationId);
     const assignments = await ctx.db
       .query("assignments")
       .withIndex("by_assigned_by", (q) => q.eq("assignedBy", args.managerId))
@@ -86,6 +100,13 @@ export const createAssignment = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    const user = await getCurrentUser(ctx);
+    if (user._id !== args.assignedBy) throw new Error("Forbidden");
+    requireRole(user.role, ["org_admin", "manager", "super_admin"]);
+    const orderCheck = await ctx.db.get(args.orderId);
+    if (!orderCheck) throw new Error("Order not found");
+    requireSameOrg(orderCheck.organizationId as Id<"organizations">, user.organizationId);
+    await rateLimit(ctx, user._id, "assignment.create", 60000, 20);
 
     const assignmentId = await ctx.db.insert("assignments", {
       orderId: args.orderId,
@@ -128,6 +149,14 @@ export const createAssignment = mutation({
       }
     }
 
+    await audit(ctx, {
+      organizationId: order!.organizationId as Id<"organizations">,
+      actorId: user._id,
+      action: "assignment.create",
+      targetType: "assignment",
+      targetId: assignmentId as unknown as string,
+      metadata: { stage: args.stage, workerId: args.workerId },
+    });
     return assignmentId;
   },
 });
@@ -147,8 +176,17 @@ export const updateAssignmentStatus = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
     const assignment = await ctx.db.get(args.assignmentId);
     if (!assignment) throw new Error("Assignment not found");
+    const worker = await ctx.db.get(assignment.workerId);
+    if (!worker) throw new Error("Worker not found");
+    requireSameOrg((worker.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), user.organizationId);
+    const isWorker = user._id === assignment.workerId;
+    const role = user.role;
+    if (!isWorker && !(role === "org_admin" || role === "manager" || role === "super_admin")) {
+      throw new Error("Forbidden");
+    }
 
     const now = Date.now();
     const updates: Record<string, unknown> = {
@@ -173,6 +211,15 @@ export const updateAssignmentStatus = mutation({
 
     await ctx.db.patch(args.assignmentId, updates);
 
+    await audit(ctx, {
+      organizationId: (worker.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+      actorId: user._id,
+      action: "assignment.status",
+      targetType: "assignment",
+      targetId: args.assignmentId as unknown as string,
+      metadata: { status: args.status },
+    });
+
     return { success: true };
   },
 });
@@ -187,8 +234,18 @@ export const addProgressUpdate = mutation({
     images: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
     const assignment = await ctx.db.get(args.assignmentId);
     if (!assignment) throw new Error("Assignment not found");
+    const worker = await ctx.db.get(assignment.workerId);
+    if (!worker) throw new Error("Worker not found");
+    requireSameOrg((worker.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">), user.organizationId);
+    const isWorker = user._id === assignment.workerId;
+    const role = user.role;
+    if (!isWorker && !(role === "org_admin" || role === "manager" || role === "super_admin")) {
+      throw new Error("Forbidden");
+    }
+    await rateLimit(ctx, user._id, "assignment.progress", 60000, 30);
 
     const now = Date.now();
 
@@ -204,6 +261,22 @@ export const addProgressUpdate = mutation({
       updatedAt: now,
     });
 
+    await audit(ctx, {
+      organizationId: (worker.organizationId as Id<"organizations">) ?? ("" as Id<"organizations">),
+      actorId: user._id,
+      action: "assignment.progress",
+      targetType: "assignment",
+      targetId: args.assignmentId as unknown as string,
+      metadata: { hasImages: Array.isArray(args.images) && args.images.length > 0 },
+    });
+
     return { success: true };
+  },
+});
+export const getAssignmentById = query({
+  args: { assignmentId: v.id("assignments") },
+  handler: async (ctx, args) => {
+    const assignment = await ctx.db.get(args.assignmentId);
+    return assignment;
   },
 });

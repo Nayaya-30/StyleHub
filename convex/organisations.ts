@@ -4,6 +4,8 @@
 
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { getCurrentUser, requireRole, requireSameOrg, audit } from "./security";
 
 /**
  * Query: Get organization by ID
@@ -167,13 +169,25 @@ export const updateOrganization = mutation({
     coverImage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { organizationId, ...updates } = args;
+    const actor = await getCurrentUser(ctx);
+    const org = await ctx.db.get(args.organizationId);
+    if (!org) throw new Error("Organization not found");
+    requireSameOrg(org._id as Id<"organizations">, actor.organizationId);
+    requireRole(actor.role, ["org_admin", "manager", "super_admin"]);
 
+    const { organizationId, ...updates } = args;
     await ctx.db.patch(organizationId, {
       ...updates,
       updatedAt: Date.now(),
     });
 
+    await audit(ctx, {
+      organizationId: org._id as Id<"organizations">,
+      actorId: actor._id,
+      action: "organization.update",
+      targetType: "organization",
+      targetId: organizationId as unknown as string,
+    });
     return { success: true };
   },
 });
@@ -236,9 +250,23 @@ export const updateOrganizationSettings = mutation({
     }),
   },
   handler: async (ctx, args) => {
+    const actor = await getCurrentUser(ctx);
+    const org = await ctx.db.get(args.organizationId);
+    if (!org) throw new Error("Organization not found");
+    requireSameOrg(org._id as Id<"organizations">, actor.organizationId);
+    requireRole(actor.role, ["org_admin", "manager", "super_admin"]);
+
     await ctx.db.patch(args.organizationId, {
       settings: args.settings,
       updatedAt: Date.now(),
+    });
+
+    await audit(ctx, {
+      organizationId: org._id as Id<"organizations">,
+      actorId: actor._id,
+      action: "organization.settings.update",
+      targetType: "organization",
+      targetId: args.organizationId as unknown as string,
     });
 
     return { success: true };
@@ -260,8 +288,11 @@ export const updateOrganizationStats = mutation({
     }),
   },
   handler: async (ctx, args) => {
+    const actor = await getCurrentUser(ctx);
     const org = await ctx.db.get(args.organizationId);
     if (!org) throw new Error("Organization not found");
+    requireSameOrg(org._id as Id<"organizations">, actor.organizationId);
+    requireRole(actor.role, ["org_admin", "manager", "super_admin"]);
 
     const updatedStats = {
       ...org.stats,
@@ -271,6 +302,14 @@ export const updateOrganizationStats = mutation({
     await ctx.db.patch(args.organizationId, {
       stats: updatedStats,
       updatedAt: Date.now(),
+    });
+
+    await audit(ctx, {
+      organizationId: org._id as Id<"organizations">,
+      actorId: actor._id,
+      action: "organization.stats.update",
+      targetType: "organization",
+      targetId: args.organizationId as unknown as string,
     });
 
     return { success: true };
@@ -286,9 +325,24 @@ export const toggleOrganizationStatus = mutation({
     isActive: v.boolean(),
   },
   handler: async (ctx, args) => {
+    const actor = await getCurrentUser(ctx);
+    const org = await ctx.db.get(args.organizationId);
+    if (!org) throw new Error("Organization not found");
+    requireSameOrg(org._id as Id<"organizations">, actor.organizationId);
+    requireRole(actor.role, ["org_admin", "manager", "super_admin"]);
+
     await ctx.db.patch(args.organizationId, {
       isActive: args.isActive,
       updatedAt: Date.now(),
+    });
+
+    await audit(ctx, {
+      organizationId: org._id as Id<"organizations">,
+      actorId: actor._id,
+      action: "organization.status.toggle",
+      targetType: "organization",
+      targetId: args.organizationId as unknown as string,
+      metadata: { isActive: args.isActive },
     });
 
     return { success: true };

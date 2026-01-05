@@ -4,6 +4,7 @@
 
 import Skeleton from "react-loading-skeleton";
 import { Card } from "@/components/ui/card";
+import { StyleGridSkeleton } from "@/components/loading/StyleCardSkeleton";
 
 export function OrganizationHeaderSkeleton() {
 	return (

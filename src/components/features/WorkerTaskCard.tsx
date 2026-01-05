@@ -8,9 +8,10 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, Calendar, User } from "lucide-react";
+import { Clock, Calendar } from "lucide-react";
 import { Assignment, Order } from "@/types";
-import { formatDate, formatDuration } from "@/lib/format";
+import { formatDate } from "@/lib/format";
+import { useEffect, useState } from "react";
 import { PRIORITY_LEVELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -37,15 +38,25 @@ export function WorkerTaskCard({ assignment, order }: WorkerTaskCardProps) {
     }
   };
 
-  const getDaysUntilDue = () => {
-    if (!order?.delivery.estimatedDate) return null;
-    const now = Date.now();
-    const dueDate = order.delivery.estimatedDate;
-    const daysLeft = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
-    return daysLeft;
-  };
-
-  const daysUntilDue = getDaysUntilDue();
+  const [daysUntilDue, setDaysUntilDue] = useState<number | null>(null);
+  useEffect(() => {
+    if (!order?.delivery.estimatedDate) {
+      const t = setTimeout(() => setDaysUntilDue(null), 0);
+      return () => clearTimeout(t);
+    }
+    const compute = () => {
+      const now = Date.now();
+      const dueDate = order.delivery.estimatedDate as number;
+      const daysLeft = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+      setDaysUntilDue(daysLeft);
+    };
+    const initial = setTimeout(compute, 0);
+    const id = setInterval(compute, 60 * 60 * 1000);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(id);
+    };
+  }, [order?.delivery.estimatedDate]);
 
   return (
     <Card className={cn(

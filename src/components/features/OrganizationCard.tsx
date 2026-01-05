@@ -9,9 +9,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MapPin, Star, Package, CheckCircle, TrendingUp } from "lucide-react";
+import { MapPin, Star, CheckCircle, TrendingUp } from "lucide-react";
 import { Organization } from "@/types";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 interface OrganizationCardProps {
   organization: Organization;
@@ -25,10 +26,12 @@ export function OrganizationCard({ organization, className }: OrganizationCardPr
         {/* Cover Image */}
         <div className="relative h-32 bg-gradient-to-br from-secondary-100 to-secondary-200">
           {organization.coverImage && (
-            <img
+            <Image
               src={organization.coverImage}
               alt={organization.name}
-              className="h-full w-full object-cover"
+              fill
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              className="object-cover"
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
